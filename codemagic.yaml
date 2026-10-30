@@ -1,0 +1,53 @@
+workflows:
+  ios-jelmy:
+    name: Jelmy iPhone (TestFlight)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: Jelmy
+    environment:
+      node: 20
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.lvndevs.jelmy
+    scripts:
+      - name: Installer les outils
+        script: npm install
+      - name: Préparer le jeu
+        script: npm run build:web
+      - name: Créer le projet iPhone
+        script: |
+          mkdir -p assets
+          cp icon-only.png splash.png assets/
+          npx cap add ios
+          npx @capacitor/assets generate --ios
+          npx cap sync ios
+      - name: Réglages de l'app
+        script: |
+          PLIST=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :NSMotionUsageDescription string Jelmy compte tes pas pour faire éclore tes œufs et te donner des récompenses." "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string Jelmy utilise le GPS, seulement si tu l'actives, pour mesurer la distance que tu marches et faire avancer tes œufs. Ta position n'est pas enregistrée." "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations~ipad" "$PLIST" || true
+      - name: Numéro de build
+        script: |
+          cd ios/App
+          agvtool new-version -all $BUILD_NUMBER
+      - name: Signature
+        script: xcode-project use-profiles
+      - name: Fabriquer l'app
+        script: |
+          xcode-project build-ipa \
+            --workspace "ios/App/App.xcworkspace" \
+            --scheme "App"
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
