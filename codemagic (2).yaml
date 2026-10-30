@@ -1,0 +1,65 @@
+workflows:
+  ios-jelmy:
+    name: Jelmy iPhone (TestFlight)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: Jelmy
+    environment:
+      groups:
+        - signing
+      vars:
+        BUNDLE_ID: com.lvndevs.jelmy
+      node: 20
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Installer les outils
+        script: npm install
+      - name: Préparer le jeu
+        script: npm run build:web
+      - name: Créer le projet iPhone
+        script: |
+          mkdir -p assets
+          cp icon-only.png splash.png assets/
+          npx cap add ios
+          npx @capacitor/assets generate --ios
+          npx cap sync ios
+      - name: Réglages de l'app
+        script: |
+          PLIST=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :NSMotionUsageDescription string Jelmy compte tes pas pour faire éclore tes œufs et te donner des récompenses." "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string Jelmy utilise le GPS, seulement si tu l'actives, pour mesurer la distance que tu marches et faire avancer tes œufs. Ta position n'est pas enregistrée." "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations~ipad" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Delete :UIRequiresFullScreen" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :UIRequiresFullScreen bool true" "$PLIST"
+      - name: Numéro de build
+        script: |
+          cd ios/App
+          agvtool new-version -all $BUILD_NUMBER
+      - name: Préparer la signature
+        script: keychain initialize
+      - name: Créer ou récupérer les certificats Apple
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+      - name: Installer les certificats
+        script: keychain add-certificates
+      - name: Appliquer la signature
+        script: xcode-project use-profiles
+      - name: Fabriquer l'app
+        script: |
+          xcode-project build-ipa \
+            --workspace "ios/App/App.xcworkspace" \
+            --scheme "App"
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
