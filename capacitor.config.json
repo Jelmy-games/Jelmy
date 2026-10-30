@@ -1,0 +1,9 @@
+{
+  "appId": "com.lvndevs.jelmy",
+  "appName": "Jelmy",
+  "webDir": "www",
+  "backgroundColor": "#FBF1F6",
+  "ios": {
+    "contentInset": "never"
+  }
+}
